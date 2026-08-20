@@ -39,6 +39,7 @@ class SubdomainFinder:
     
     def __init__(self, domain: str, callback=None):
         self.domain = domain
+        self.base_domain = self._extract_base_domain(domain)  # example.com
         self.subdomains: Set[str] = set()
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -51,6 +52,13 @@ class SubdomainFinder:
             'omnisint': 0
         }
         self.callback = callback
+    
+    def _extract_base_domain(self, domain: str) -> str:
+        """Ana domain'i çıkar (example.com, domain.co.uk vs)"""
+        parts = domain.lower().split('.')
+        if len(parts) >= 2:
+            return '.'.join(parts[-2:])
+        return domain.lower()
         
     def update_progress(self, message: str, step: int = 1):
         """İlerleme callback'i"""
@@ -67,6 +75,25 @@ class SubdomainFinder:
         if name.endswith('.'):
             name = name[:-1]
         return name
+    
+    def is_valid_subdomain(self, subdomain: str) -> bool:
+        """Subdomainin geçerli olup olmadığını kontrol et"""
+        if not subdomain or len(subdomain) < 3:
+            return False
+        
+        # Subdomain'in ana domain'le ilişkili olup olmadığını kontrol et
+        if subdomain == self.base_domain:
+            # Ana domain kendisi değil, sadece subdomainler istiyoruz
+            return False
+        
+        if subdomain.endswith(self.base_domain):
+            return True
+        
+        # Eğer domain sadece FQDN değilse, daha esnek bir kontrol yap
+        if self.base_domain in subdomain:
+            return True
+            
+        return False
 
     def create_session_with_retries(self, retries: int = 2) -> requests.Session:
         """Retry stratejisi ile session oluştur"""
@@ -100,7 +127,7 @@ class SubdomainFinder:
                             if isinstance(dns_names, list):
                                 for name in dns_names:
                                     norm = self.normalize_subdomain(name)
-                                    if norm and (self.domain in norm or norm.endswith(self.domain)):
+                                    if norm and self.is_valid_subdomain(norm):
                                         if norm not in self.subdomains:
                                             self.found_sources['certspotter'] += 1
                                             self.subdomains.add(norm)
@@ -133,7 +160,7 @@ class SubdomainFinder:
                             subject = dict(x[0] for x in cert['subject'])
                             if 'commonName' in subject:
                                 cn = self.normalize_subdomain(subject['commonName'])
-                                if cn.endswith(self.domain):
+                                if cn and self.is_valid_subdomain(cn):
                                     if cn not in self.subdomains:
                                         self.found_sources['ssl'] += 1
                                         self.subdomains.add(cn)
@@ -143,7 +170,7 @@ class SubdomainFinder:
                     for sub_alt in cert.get('subjectAltName', []):
                         if sub_alt[0] == 'DNS':
                             name = self.normalize_subdomain(sub_alt[1])
-                            if name and (self.domain in name or name.endswith(self.domain)):
+                            if name and self.is_valid_subdomain(name):
                                 if name not in self.subdomains:
                                     self.found_sources['ssl'] += 1
                                     self.subdomains.add(name)
@@ -186,7 +213,7 @@ class SubdomainFinder:
                             parts = entry.split(',')
                             if len(parts) >= 1:
                                 subdomain = self.normalize_subdomain(parts[0])
-                                if subdomain and (self.domain in subdomain or subdomain.endswith(self.domain)):
+                                if subdomain and self.is_valid_subdomain(subdomain):
                                     if subdomain not in self.subdomains:
                                         self.found_sources['rapiddns'] += 1
                                         self.subdomains.add(subdomain)
@@ -225,7 +252,7 @@ class SubdomainFinder:
                     if isinstance(data, list) and len(data) > 0:
                         for name in data:
                             norm = self.normalize_subdomain(name)
-                            if norm and (self.domain in norm or norm.endswith(self.domain)):
+                            if norm and self.is_valid_subdomain(norm):
                                 if norm not in self.subdomains:
                                     self.found_sources['sublist3r'] += 1
                                     self.subdomains.add(norm)
@@ -260,7 +287,7 @@ class SubdomainFinder:
                     if isinstance(data, list) and len(data) > 0:
                         for name in data:
                             norm = self.normalize_subdomain(name)
-                            if norm and (self.domain in norm or norm.endswith(self.domain)):
+                            if norm and self.is_valid_subdomain(norm):
                                 if norm not in self.subdomains:
                                     self.found_sources['omnisint'] += 1
                                     self.subdomains.add(norm)
