@@ -135,12 +135,16 @@ class SubdomainFinder:
                     else:
                         self.update_progress("⚪ Cert Spotter: Sonuç bulunamadı", 1)
                 except Exception as e:
+                    print(f"[CERTSPOTTER ERROR] {str(e)}")
                     self.update_progress(f"⚠️ Cert Spotter parse hatası: {str(e)[:100]}", 1)
             else:
+                print(f"[CERTSPOTTER] HTTP {response.status_code}: {response.text[:200]}")
                 self.update_progress(f"⚠️ Cert Spotter HTTP {response.status_code}", 1)
         except requests.exceptions.Timeout:
+            print("[CERTSPOTTER] Timeout")
             self.update_progress("⏱️ Cert Spotter: Timeout", 1)
         except Exception as e:
+            print(f"[CERTSPOTTER] Exception: {str(e)}")
             self.update_progress(f"❌ Cert Spotter hatası", 1)
     
     def search_ssl_certificates(self) -> None:
@@ -181,12 +185,16 @@ class SubdomainFinder:
                         self.update_progress("⚪ SSL: Subdomain bulunamadı", 1)
                         
         except socket.timeout:
+            print("[SSL] Timeout")
             self.update_progress("⏱️ SSL: Timeout", 1)
         except socket.gaierror:
+            print("[SSL] Domain not found")
             self.update_progress("⚠️ SSL: Domain bulunamadı", 1)
         except ConnectionRefusedError:
+            print("[SSL] Port 443 refused")
             self.update_progress("⚠️ SSL: Port 443 kapalı", 1)
         except Exception as e:
+            print(f"[SSL] Exception: {str(e)}")
             self.update_progress("❌ SSL hatası", 1)
     
     def search_rapiddns(self) -> None:
@@ -199,9 +207,11 @@ class SubdomainFinder:
             try:
                 response = session.get(url, headers=self.headers, timeout=10, verify=False)
             except requests.exceptions.Timeout:
+                print("[RAPIDDNS] Timeout")
                 self.update_progress("⏱️ RapidDNS: Timeout", 1)
                 return
-            except requests.exceptions.ConnectionError:
+            except requests.exceptions.ConnectionError as e:
+                print(f"[RAPIDDNS] Connection error: {str(e)}")
                 self.update_progress("⚠️ RapidDNS: Bağlantı hatası", 1)
                 return
             
@@ -219,12 +229,16 @@ class SubdomainFinder:
                                         self.subdomains.add(subdomain)
                         self.update_progress(f"✅ RapidDNS: {self.found_sources['rapiddns']} subdomain bulundu", 1)
                     else:
+                        print("[RAPIDDNS] No FDNS_A in response")
                         self.update_progress("⚪ RapidDNS: Sonuç bulunamadı", 1)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    print(f"[RAPIDDNS] JSON decode error: {str(e)}, response: {response.text[:200]}")
                     self.update_progress("⚠️ RapidDNS: JSON hatası", 1)
             else:
+                print(f"[RAPIDDNS] HTTP {response.status_code}: {response.text[:200]}")
                 self.update_progress(f"⚠️ RapidDNS HTTP {response.status_code}", 1)
         except Exception as e:
+            print(f"[RAPIDDNS] Exception: {str(e)}")
             self.update_progress("❌ RapidDNS hatası", 1)
     
     def search_sublist3r(self) -> None:
@@ -236,9 +250,11 @@ class SubdomainFinder:
             try:
                 response = session.get(url, headers=self.headers, timeout=10)
             except requests.exceptions.Timeout:
+                print("[SUBLIST3R] Timeout")
                 self.update_progress("⏱️ Sublist3r: Timeout", 1)
                 return
-            except requests.exceptions.ConnectionError:
+            except requests.exceptions.ConnectionError as e:
+                print(f"[SUBLIST3R] Connection error: {str(e)}")
                 self.update_progress("⚠️ Sublist3r: Bağlantı hatası", 1)
                 return
             
@@ -258,12 +274,16 @@ class SubdomainFinder:
                                     self.subdomains.add(norm)
                         self.update_progress(f"✅ Sublist3r: {self.found_sources['sublist3r']} subdomain bulundu", 1)
                     else:
+                        print("[SUBLIST3R] No data returned")
                         self.update_progress("⚪ Sublist3r: Sonuç bulunamadı", 1)
                 except Exception as e:
+                    print(f"[SUBLIST3R] Parse error: {str(e)}")
                     self.update_progress(f"⚠️ Sublist3r parse hatası", 1)
             else:
+                print(f"[SUBLIST3R] HTTP {response.status_code}: {response.text[:200]}")
                 self.update_progress(f"⚠️ Sublist3r HTTP {response.status_code}", 1)
         except Exception as e:
+            print(f"[SUBLIST3R] Exception: {str(e)}")
             self.update_progress("❌ Sublist3r hatası", 1)
     
     def search_omnisint(self) -> None:
@@ -275,9 +295,11 @@ class SubdomainFinder:
             try:
                 response = session.get(url, headers=self.headers, timeout=10)
             except requests.exceptions.Timeout:
+                print("[OMNISINT] Timeout")
                 self.update_progress("⏱️ Omnisint: Timeout", 1)
                 return
-            except requests.exceptions.ConnectionError:
+            except requests.exceptions.ConnectionError as e:
+                print(f"[OMNISINT] Connection error: {str(e)}")
                 self.update_progress("⚠️ Omnisint: Bağlantı hatası", 1)
                 return
             
@@ -293,14 +315,19 @@ class SubdomainFinder:
                                     self.subdomains.add(norm)
                         self.update_progress(f"✅ Omnisint: {self.found_sources['omnisint']} subdomain bulundu", 1)
                     else:
+                        print("[OMNISINT] No data returned")
                         self.update_progress("⚪ Omnisint: Sonuç bulunamadı", 1)
                 except Exception as e:
+                    print(f"[OMNISINT] Parse error: {str(e)}")
                     self.update_progress(f"⚠️ Omnisint parse hatası", 1)
             elif response.status_code == 404:
+                print("[OMNISINT] 404 Not found")
                 self.update_progress("⚠️ Omnisint: Veri bulunamadı (404)", 1)
             else:
+                print(f"[OMNISINT] HTTP {response.status_code}: {response.text[:200]}")
                 self.update_progress(f"⚠️ Omnisint HTTP {response.status_code}", 1)
         except Exception as e:
+            print(f"[OMNISINT] Exception: {str(e)}")
             self.update_progress("❌ Omnisint hatası", 1)
     
     def verify_subdomain(self, subdomain: str) -> bool:
@@ -425,6 +452,7 @@ def start_scan():
             scan_status['results'] = result
             scan_status['sources'] = result['sources']
         except Exception as e:
+            print(f"[SCAN ERROR] {str(e)}")
             scan_status['results'] = {'error': str(e)}
         finally:
             scan_status['running'] = False
