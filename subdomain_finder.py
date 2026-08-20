@@ -8,6 +8,9 @@ Belirtilen domain icin subdomain araması yapir ve sonuçlari dosyaya kaydeder.
 import requests
 import json
 import sys
+import os
+import subprocess
+import platform
 from typing import Set, List
 from datetime import datetime
 import socket
@@ -147,6 +150,19 @@ class SubdomainFinder:
             except:
                 return "-"
     
+    def open_file(self, file_path: str) -> None:
+        """Dosyayi isletim sistemine göre ac"""
+        try:
+            if platform.system() == 'Windows':
+                os.startfile(file_path)
+            elif platform.system() == 'Darwin':
+                subprocess.Popen(['open', file_path])
+            else:
+                subprocess.Popen(['xdg-open', file_path])
+            print(f"[OK] Dosya acildi: {file_path}")
+        except Exception as e:
+            print(f"[-] Dosya acilamadi: {e}")
+    
     def save_results(self, output_file: str = None) -> str:
         """Sonuçlari dosyaya kaydet"""
         if output_file is None:
@@ -213,6 +229,8 @@ class SubdomainFinder:
             if output_file:
                 print(f"[OK] Sonuçlar kaydedildi: {output_file}")
                 print(f"[OK] Toplam {len(self.subdomains)} subdomain bulundu")
+                print(f"\n[*] Dosya aciliyor...\n")
+                self.open_file(output_file)
             else:
                 print(f"[HATA] Sonuçlar kaydedilemedi!")
         else:
