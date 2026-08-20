@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGüvenliği - Subdomain Scanner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🔍 Subdomain Scanner</h1>
+                <p class="subtitle">Çoklu Kaynak Subdomain Keşif Aracı</p>
+                <p class="author">WebGüvenliği Team | sAMeTTurk v2.0</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Input Section -->
+            <section class="input-section">
+                <div class="input-group">
+                    <input 
+                        type="text" 
+                        id="domainInput" 
+                        class="domain-input" 
+                        placeholder="örn: example.com, google.com, github.com"
+                        autocomplete="off"
+                    >
+                    <button id="scanBtn" class="scan-btn">
+                        <span class="btn-text">🚀 Taramayı Başlat</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Status Section -->
+            <section class="status-section" id="statusSection" style="display: none;">
+                <div class="status-card">
+                    <div class="status-header">
+                        <h2 id="domainDisplay"></h2>
+                        <span class="status-badge" id="statusBadge">Tarama Çalışıyor</span>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <p class="progress-text" id="progressText">Başlatılıyor...</p>
+                    </div>
+
+                    <!-- Live Messages -->
+                    <div class="messages-container" id="messagesContainer">
+                        <div class="message-item">⏳ Tarama başlatılıyor...</div>
+                    </div>
+
+                    <!-- Sources Summary -->
+                    <div class="sources-summary" id="sourcesSummary" style="display: none;">
+                        <h3>📊 Kaynaklar Özeti</h3>
+                        <div class="sources-grid" id="sourcesGrid"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-header">
+                    <h2>📋 Tarama Sonuçları</h2>
+                    <div class="results-actions">
+                        <button id="exportBtn" class="export-btn">💾 CSV İndir</button>
+                        <button id="newScanBtn" class="new-scan-btn">🔄 Yeni Tarama</button>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card total">
+                        <div class="stat-value" id="totalCount">0</div>
+                        <div class="stat-label">Toplam Subdomain</div>
+                    </div>
+                    <div class="stat-card active">
+                        <div class="stat-value" id="activeCount">0</div>
+                        <div class="stat-label">Aktif</div>
+                    </div>
+                    <div class="stat-card passive">
+                        <div class="stat-value" id="passiveCount">0</div>
+                        <div class="stat-label">Pasif</div>
+                    </div>
+                    <div class="stat-card timestamp">
+                        <div class="stat-value" id="scanTime">--:--</div>
+                        <div class="stat-label">Tarama Tarihi</div>
+                    </div>
+                </div>
+
+                <!-- Search and Filter -->
+                <div class="search-filter">
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        class="search-box"
+                        placeholder="🔎 Subdomain ara..."
+                    >
+                    <select id="filterSelect" class="filter-select">
+                        <option value="all">Tümü</option>
+                        <option value="active">Aktif Olanlar</option>
+                        <option value="passive">Pasif Olanlar</option>
+                    </select>
+                </div>
+
+                <!-- Results Table -->
+                <div class="table-container">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Subdomain</th>
+                                <th>Durum</th>
+                                <th>HTTP Status</th>
+                                <th>İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody">
+                            <tr><td colspan="5" class="loading">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Error Section -->
+            <section class="error-section" id="errorSection" style="display: none;">
+                <div class="error-card">
+                    <h2>❌ Hata Oluştu</h2>
+                    <p id="errorMessage"></p>
+                    <button id="errorRetryBtn" class="error-retry-btn">🔄 Tekrar Dene</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>🔐 WebGüvenliği Team | Ethik Amaçlarla Kullanılmalıdır</p>
+            <p>Çoklu Kaynak Entegrasyonu: Certspotter • SSL • RapidDNS • Sublist3r • Omnisint</p>
+        </footer>
+    </div>
+
+    <!-- Modal for Details -->
+    <div id="detailsModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 id="modalTitle"></h2>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
