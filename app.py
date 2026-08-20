@@ -77,23 +77,32 @@ class SubdomainFinder:
         return name
     
     def is_valid_subdomain(self, subdomain: str) -> bool:
-        """Subdomainin geçerli olup olmadığını kontrol et"""
+        """Subdomainin geçerli olup olmadığını kontrol et - FLEXIBLE VERSION"""
         if not subdomain or len(subdomain) < 3:
             return False
         
-        # Subdomain'in ana domain'le ilişkili olup olmadığını kontrol et
+        # Ana domain kendisi değil
         if subdomain == self.base_domain:
-            # Ana domain kendisi değil, sadece subdomainler istiyoruz
             return False
         
-        if subdomain.endswith(self.base_domain):
-            return True
+        # En temel kontrol: base_domain içinde geçiyor mu?
+        if self.base_domain not in subdomain:
+            return False
         
-        # Eğer domain sadece FQDN değilse, daha esnek bir kontrol yap
-        if self.base_domain in subdomain:
-            return True
-            
-        return False
+        # Subdomain MUTLAKA base_domain'le bitmeli
+        if not subdomain.endswith(self.base_domain):
+            return False
+        
+        # Noktadan önceki kısım en az 1 karakter olmalı (a.example.com geçerli, .example.com değil)
+        prefix = subdomain[:-len(self.base_domain)]
+        if prefix and prefix[-1] == '.':
+            prefix = prefix[:-1]
+        
+        # Boş prefix veya sadece noktalar içeren prefix geçersiz
+        if not prefix or not any(c.isalnum() or c == '-' for c in prefix):
+            return False
+        
+        return True
 
     def create_session_with_retries(self, retries: int = 2) -> requests.Session:
         """Retry stratejisi ile session oluştur"""
@@ -289,7 +298,7 @@ class SubdomainFinder:
     def search_omnisint(self) -> None:
         """Omnisint/sonar API üzerinden subdomain ara"""
         try:
-            self.update_progress("🛰️ Omnisint (sonar) taranıyor...", 1)
+            self.update_progress("��️ Omnisint (sonar) taranıyor...", 1)
             url = f"https://sonar.omnisint.io/subdomains/{self.domain}"
             session = self.create_session_with_retries(retries=2)
             try:
