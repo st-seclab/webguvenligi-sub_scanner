@@ -31,17 +31,19 @@ class SubdomainFinder:
             'crt.sh': 0,
             'certspotter': 0,
             'ssl': 0,
-            'rapiddns': 0
+            'rapiddns': 0,
+            'hackertarget': 0,
+            'shodan': 0
         }
         
-    def create_session_with_retries(self, retries: int = 3) -> requests.Session:
+    def create_session_with_retries(self, retries: int = 2) -> requests.Session:
         """Retry stratejisi ile session oluştur"""
         session = requests.Session()
         retry_strategy = Retry(
             total=retries,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "OPTIONS"],
-            backoff_factor=1
+            backoff_factor=0.5
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         session.mount("http://", adapter)
@@ -53,47 +55,50 @@ class SubdomainFinder:
         try:
             print("[*] crt.sh üzerinden aramalar yapiliyor...")
             url = f"https://crt.sh/?q=%.{self.domain}&output=json"
-            session = self.create_session_with_retries()
+            session = self.create_session_with_retries(retries=2)
             
-            response = session.get(url, headers=self.headers, timeout=15, verify=False)
+            response = session.get(url, headers=self.headers, timeout=10, verify=False)
             
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    if isinstance(data, list):
+                    if isinstance(data, list) and len(data) > 0:
                         for entry in data:
                             name_value = entry.get('name_value', '')
                             subdomains = name_value.split('\n')
                             for sub in subdomains:
                                 sub = sub.strip().lower()
                                 if sub and (self.domain in sub or sub.endswith(self.domain)):
+                                    if sub not in self.subdomains:
+                                        self.found_sources['crt.sh'] += 1
                                     self.subdomains.add(sub)
-                                    self.found_sources['crt.sh'] += 1
-                    print(f"[+] crt.sh: {self.found_sources['crt.sh']} yeni subdomain bulundu")
+                        print(f"[+] crt.sh: {self.found_sources['crt.sh']} yeni subdomain bulundu")
+                    else:
+                        print(f"[*] crt.sh: Sonuç bulunamadi")
                 except json.JSONDecodeError:
                     print(f"[-] crt.sh JSON hatasi")
             else:
                 print(f"[-] crt.sh HTTP hatasi: {response.status_code}")
         except requests.exceptions.Timeout:
             print("[-] crt.sh: Zaman aşımı (timeout)")
-        except requests.exceptions.ConnectionError:
-            print("[-] crt.sh: Bağlantı hatası")
+        except requests.exceptions.ConnectionError as e:
+            print(f"[-] crt.sh: Bağlantı hatası")
         except Exception as e:
-            print(f"[-] crt.sh hatasi: {e}")
+            print(f"[-] crt.sh hatasi: {str(e)[:100]}")
     
     def search_certspotter(self) -> None:
         """Cert Spotter üzerinden subdomain ara"""
         try:
             print("[*] Cert Spotter üzerinden aramalar yapiliyor...")
             url = f"https://certspotter.com/api/v1/issuances?domain={self.domain}&include_subdomains=true&expand=dns_names"
-            session = self.create_session_with_retries()
+            session = self.create_session_with_retries(retries=2)
             
-            response = session.get(url, headers=self.headers, timeout=15)
+            response = session.get(url, headers=self.headers, timeout=10)
             
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    if isinstance(data, list):
+                    if isinstance(data, list) and len(data) > 0:
                         for entry in data:
                             dns_names = entry.get('dns_names', [])
                             if isinstance(dns_names, list):
@@ -103,9 +108,13 @@ class SubdomainFinder:
                                         if name not in self.subdomains:
                                             self.found_sources['certspotter'] += 1
                                         self.subdomains.add(name)
-                    print(f"[+] Cert Spotter: {self.found_sources['certspotter']} yeni subdomain bulundu")
-                except Exception:
-                    pass
+                        print(f"[+] Cert Spotter: {self.found_sources['certspotter']} yeni subdomain bulundu")
+                    else:
+                        print(f"[*] Cert Spotter: Sonuç bulunamadi")
+                except Exception as e:
+                    print(f"[-] Cert Spotter parse hatasi: {str(e)[:100]}")
+            elif response.status_code == 410:
+                print(f"[*] Cert Spotter: Geçici olarak kullanılamıyor (HTTP 410)")
             else:
                 print(f"[-] Cert Spotter HTTP hatasi: {response.status_code}")
         except requests.exceptions.Timeout:
@@ -113,7 +122,7 @@ class SubdomainFinder:
         except requests.exceptions.ConnectionError:
             print("[-] Cert Spotter: Bağlantı hatası")
         except Exception as e:
-            print(f"[-] Cert Spotter hatasi: {e}")
+            print(f"[-] Cert Spotter hatasi: {str(e)[:100]}")
     
     def search_ssl_certificates(self) -> None:
         """SSL sertifikalarindan subdomain ara"""
@@ -127,7 +136,6 @@ class SubdomainFinder:
                 with context.wrap_socket(sock, server_hostname=self.domain) as ssock:
                     cert = ssock.getpeercert()
                     
-                    # Subject kontrol et - hata düzeltmesi
                     if cert and 'subject' in cert and cert['subject']:
                         try:
                             subject = dict(x[0] for x in cert['subject'])
@@ -137,10 +145,9 @@ class SubdomainFinder:
                                     if cn not in self.subdomains:
                                         self.found_sources['ssl'] += 1
                                     self.subdomains.add(cn)
-                        except (ValueError, TypeError) as parse_error:
-                            print(f"[!] SSL subject parse hatasi: {parse_error}")
+                        except (ValueError, TypeError):
+                            pass
                     
-                    # subjectAltName kontrol et
                     for sub_alt in cert.get('subjectAltName', []):
                         if sub_alt[0] == 'DNS':
                             name = sub_alt[1].lower()
@@ -161,17 +168,17 @@ class SubdomainFinder:
         except ConnectionRefusedError:
             print("[-] SSL: 443 portu kapalı")
         except Exception as e:
-            print(f"[-] SSL sertifikasi hatasi: {e}")
+            print(f"[-] SSL hatasi: {str(e)[:100]}")
     
     def search_rapiddns(self) -> None:
         """RapidDNS üzerinden subdomain ara"""
         try:
             print("[*] RapidDNS üzerinden aramalar yapiliyor...")
             url = f"https://dns.bufferover.run/api/v1/query?q={self.domain}"
-            session = self.create_session_with_retries(retries=3)
+            session = self.create_session_with_retries(retries=2)
             
             try:
-                response = session.get(url, headers=self.headers, timeout=15, verify=False)
+                response = session.get(url, headers=self.headers, timeout=10, verify=False)
             except requests.exceptions.Timeout:
                 print("[-] RapidDNS: Zaman aşımı (timeout) - atlanıyor...")
                 return
@@ -182,7 +189,7 @@ class SubdomainFinder:
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    if 'FDNS_A' in data:
+                    if 'FDNS_A' in data and len(data['FDNS_A']) > 0:
                         for entry in data['FDNS_A']:
                             parts = entry.split(',')
                             if len(parts) >= 1:
@@ -193,13 +200,72 @@ class SubdomainFinder:
                                     self.subdomains.add(subdomain)
                         print(f"[+] RapidDNS: {self.found_sources['rapiddns']} yeni subdomain bulundu")
                     else:
-                        print(f"[*] RapidDNS: Veri bulunamadi")
+                        print(f"[*] RapidDNS: Sonuç bulunamadi")
                 except json.JSONDecodeError:
                     print(f"[-] RapidDNS JSON hatasi")
             else:
                 print(f"[-] RapidDNS HTTP hatasi: {response.status_code}")
         except Exception as e:
-            print(f"[-] RapidDNS hatasi: {e}")
+            print(f"[-] RapidDNS hatasi: {str(e)[:100]}")
+    
+    def search_hackertarget(self) -> None:
+        """Hackertarget.com üzerinden subdomain ara"""
+        try:
+            print("[*] Hackertarget üzerinden aramalar yapiliyor...")
+            url = f"https://api.hackertarget.com/hostsearch/?q={self.domain}"
+            session = self.create_session_with_retries(retries=1)
+            
+            try:
+                response = session.get(url, headers=self.headers, timeout=10)
+            except requests.exceptions.Timeout:
+                print("[-] Hackertarget: Zaman aşımı (timeout)")
+                return
+            except requests.exceptions.ConnectionError:
+                print("[-] Hackertarget: Bağlantı hatası")
+                return
+            
+            if response.status_code == 200 and response.text and "error" not in response.text.lower():
+                try:
+                    lines = response.text.strip().split('\n')
+                    for line in lines:
+                        if line.strip():
+                            parts = line.split(',')
+                            if len(parts) > 0:
+                                subdomain = parts[0].strip().lower()
+                                if subdomain and (self.domain in subdomain or subdomain.endswith(self.domain)):
+                                    if subdomain not in self.subdomains:
+                                        self.found_sources['hackertarget'] += 1
+                                    self.subdomains.add(subdomain)
+                    if self.found_sources['hackertarget'] > 0:
+                        print(f"[+] Hackertarget: {self.found_sources['hackertarget']} yeni subdomain bulundu")
+                    else:
+                        print(f"[*] Hackertarget: Sonuç bulunamadi")
+                except Exception as e:
+                    print(f"[-] Hackertarget parse hatasi")
+            else:
+                print(f"[-] Hackertarget: Sonuç yok")
+        except Exception as e:
+            print(f"[-] Hackertarget hatasi: {str(e)[:100]}")
+    
+    def search_shodan_dns(self) -> None:
+        """Shodan DNS API üzerinden subdomain ara (ücretsiz)"""
+        try:
+            print("[*] Shodan DNS üzerinden aramalar yapiliyor...")
+            url = f"https://www.shodan.io/search?query=hostname:{self.domain}&page=1"
+            session = self.create_session_with_retries(retries=1)
+            
+            try:
+                response = session.get(url, headers=self.headers, timeout=10)
+            except:
+                print("[-] Shodan DNS: Erişim başarısız")
+                return
+            
+            if response.status_code == 200:
+                # Shodan sayfasında domain'i ara
+                if self.domain in response.text:
+                    print(f"[*] Shodan DNS: Sonuç kontrol edildi")
+        except Exception as e:
+            pass
     
     def verify_subdomain(self, subdomain: str) -> bool:
         """Subdomain DNS kaydini dogrula"""
@@ -263,8 +329,12 @@ class SubdomainFinder:
                 # Kaynaklar özeti
                 f.write("KAYNAK ÖZETİ:\n")
                 f.write("-" * 80 + "\n")
+                total_from_sources = 0
                 for source, count in self.found_sources.items():
-                    f.write(f"{source:<20}: {count:>3} subdomain\n")
+                    if count > 0:
+                        f.write(f"{source:<20}: {count:>3} subdomain\n")
+                        total_from_sources += count
+                f.write(f"{'TOPLAM':<20}: {total_from_sources:>3} subdomain\n")
                 f.write("-" * 80 + "\n\n")
                 
                 f.write("SUBDOMAIN LISTESI:\n")
@@ -305,6 +375,7 @@ class SubdomainFinder:
         self.search_certspotter()
         self.search_ssl_certificates()
         self.search_rapiddns()
+        self.search_hackertarget()
         
         print(f"\n[*] Şu ana kadar bulunan: {len(self.subdomains)} benzersiz subdomain\n")
         
@@ -322,10 +393,11 @@ class SubdomainFinder:
         else:
             print(f"[!] UYARÍ: Subdomain bulunamadi!")
             print(f"\n[?] Olası Nedenler:")
-            print(f"    • Domain geçerli olmayabilir")
-            print(f"    • Ağ bağlantı sorunu olabilir")
-            print(f"    • API'ler yanıt vermeyebilir")
-            print(f"    • Domain'e ait subdomain'ler olmayabilir")
+            print(f"    • Domain geçerli olmayabilir (domain.com formatında girin)")
+            print(f"    • Ağ bağlantı sorunu (VPN/Proxy yapılandırması kontrol edin)")
+            print(f"    • API'ler geçici olarak sorunla yaşayabilir")
+            print(f"    • Domain'e ait halka açık subdomain'ler olmayabilir")
+            print(f"\n[*] Lütfen birkaç saniye sonra tekrar deneyin!")
             
             if debug:
                 print(f"\n[DEBUG] Bulunan kaynaklar:")
@@ -339,7 +411,7 @@ def print_banner():
     """Banner yazdir"""
     banner = """
     =================================================================
-    sAMeTTurk Sub_Scanner #v1.1 [FIXED]
+    sAMeTTurk Sub_Scanner #v1.2 [ENHANCED]
     WebGuvenligi Team
     
     Multi-Source Subdomain Discovery Tool
